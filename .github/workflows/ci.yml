@@ -1,0 +1,88 @@
+name: CI Flujix
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-backend:
+    name: Pruebas del backend (Jest + Supertest)
+    runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Ejecutar pruebas
+        run: npm test
+        env:
+          NODE_ENV: test
+          MONGO_URI_TEST: mongodb://localhost:27017/flujix_test
+
+      - name: Reportar resultado
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Todas las pruebas pasaron" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Hay pruebas fallidas" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  build-frontend:
+    name: Build del frontend (Vite)
+    runs-on: ubuntu-latest
+    needs: test-backend
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Build de producción
+        run: npm run build
+
+      - name: Publicar artefacto del build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
