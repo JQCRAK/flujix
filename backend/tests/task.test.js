@@ -6,22 +6,24 @@
 const request = require('supertest');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { MongoMemoryServer } = require('mongodb-memory-server');
 const app = require('../src/app');
 const Task = require('../src/models/Task');
 const User = require('../src/models/User');
 const { signToken } = require('../src/middleware/auth');
 
-const MONGO_URI_TEST =
-  process.env.MONGO_URI_TEST || 'mongodb://localhost:27017/flujix_test';
-
 const PASSWORD = 'Password123!';
 let passwordHash; // hash precalculado para acelerar la creación de usuarios
+let mongoServer; // base de datos MongoDB en memoria, solo para pruebas
 
 let admin, user1, user2;
 let adminToken, user1Token, user2Token;
 
 beforeAll(async () => {
-  await mongoose.connect(MONGO_URI_TEST);
+  // Arranca una base de datos MongoDB en memoria. No requiere instalar Mongo,
+  // por lo que funciona igual en local, en Codespaces y en el CI.
+  mongoServer = await MongoMemoryServer.create();
+  await mongoose.connect(mongoServer.getUri());
   passwordHash = await bcrypt.hash(PASSWORD, 10);
 });
 
@@ -43,6 +45,7 @@ beforeEach(async () => {
 afterAll(async () => {
   await mongoose.connection.dropDatabase();
   await mongoose.connection.close();
+  if (mongoServer) await mongoServer.stop();
 });
 
 // Helper: crea una tarea directamente en BD (asignada a user1 por defecto)
